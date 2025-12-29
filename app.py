@@ -49,9 +49,9 @@ height=0
 
 # ================= LOGIN =================
 if not st.session_state.token:
-    st.header("🔐 Login")
+    st.header("🔐 Login for Paycode Events Configuration")
 
-    st.info("Use the UI below to login")
+    st.info("Enter Credentials")
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
