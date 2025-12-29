@@ -261,26 +261,39 @@ st.header("⬇️ Download Existing Paycode Events")
 if st.button("Download"):
     r = requests.get(st.session_state.BASE_URL, headers=headers_auth)
 
-    rows = []
-    for event in r.json():
-        for sch in event.get("schedules", []):
-            try:
-                date = f"{int(sch['repeatDay']):02d}-{int(sch['repeatMonth']):02d}-{int(sch['repeatYear'])}"
-            except Exception:
-                date = ""
+    if r.status_code != 200:
+        st.error("❌ Failed to fetch Paycode Events")
+    else:
+        rows = []
 
-            rows.append({
-                "id": event.get("id"),
-                "name": event.get("name"),
-                "description": event.get("description"),
-                "paycode_id": event.get("paycode", {}).get("id"),
-                "holiday_name": sch.get("name"),
-                "holiday_date(DD-MM-YYYY)": date
-            })
+        for event in r.json():
+            for sch in event.get("schedules", []):
+                try:
+                    date = f"{int(sch['repeatDay']):02d}-{int(sch['repeatMonth']):02d}-{int(sch['repeatYear'])}"
+                except Exception:
+                    date = ""
 
-    df = pd.DataFrame(rows)
+                rows.append({
+                    "id": event.get("id"),
+                    "name": event.get("name"),
+                    "description": event.get("description"),
+                    "paycode_id": event.get("paycode", {}).get("id"),
+                    "holiday_name": sch.get("name"),
+                    "holiday_date(DD-MM-YYYY)": date
+                })
 
-    st.download_button(
+        df = pd.DataFrame(rows)
+        csv_data = df.to_csv(index=False)
+
+        # 👇 AUTO DOWNLOAD (no second click)
+        st.download_button(
+            label="⬇️ Downloading…",
+            data=csv_data,
+            file_name="paycode_events_export.csv",
+            mime="text/csv",
+            key="auto_download"
+        )
+
         "⬇️ Download CSV",
         df.to_csv(index=False),
         file_name="paycode_events_export.csv",
