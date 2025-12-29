@@ -19,7 +19,7 @@ def init(key, value):
 init("logged_in", False)
 init("username", "")
 init("token", None)
-init("view", "login")   # login | dashboard | api | upload | submit | delete | download
+init("view", "login")   # login | dashboard | api
 init("AUTH_URL", DEFAULT_AUTH_URL)
 init("BASE_URL", DEFAULT_BASE_URL)
 init("START_DATE", DEFAULT_START_DATE)
@@ -47,6 +47,11 @@ body { background:#f4f6fb; font-family: Inter, sans-serif; }
   grid-template-columns:repeat(2, 260px);
   gap:20px;
   justify-content:center;
+}
+
+button {
+  font-weight:600;
+  border-radius:8px !important;
 }
 
 .top-right {
@@ -140,7 +145,7 @@ if st.button("Logout"):
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown("## Paycode Events Dashboard")
-st.info(
+st.markdown(
     "**To create a Paycode Event, do not enter the ID.**  \n"
     "**To update a Paycode Event, enter the ID.**"
 )
@@ -258,7 +263,7 @@ if st.session_state.view == "delete":
                 )
         st.success("Delete completed")
 
-# ================= DOWNLOAD (FIXED) =================
+# ================= DOWNLOAD =================
 if st.session_state.view == "download":
 
     r = requests.get(st.session_state.BASE_URL, headers=headers_auth)
@@ -285,7 +290,6 @@ if st.session_state.view == "download":
             })
 
     df = pd.DataFrame(rows)
-
     st.download_button(
         "Download CSV",
         df.to_csv(index=False),
