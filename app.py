@@ -255,10 +255,10 @@ if st.button("Delete Paycode Events"):
         else:
             st.write(f"❌ Failed to delete {pid}")
 
-# ================= FETCH & DOWNLOAD =================
+# ================= FETCH & AUTO DOWNLOAD =================
 st.header("⬇️ Download Existing Paycode Events")
 
-if st.button("Download"):
+if st.button("Download Existing Paycode Events"):
     r = requests.get(st.session_state.BASE_URL, headers=headers_auth)
 
     if r.status_code != 200:
@@ -285,17 +285,9 @@ if st.button("Download"):
         df = pd.DataFrame(rows)
         csv_data = df.to_csv(index=False)
 
-        # 👇 AUTO DOWNLOAD (no second click)
         st.download_button(
-            label="⬇️ Downloading…",
+            label="⬇️ Download CSV",
             data=csv_data,
             file_name="paycode_events_export.csv",
-            mime="text/csv",
-            key="auto_download"
+            mime="text/csv"
         )
-
-        "⬇️ Download CSV",
-        df.to_csv(index=False),
-        file_name="paycode_events_export.csv",
-        mime="text/csv"
-    )
