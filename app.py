@@ -34,10 +34,16 @@ st.markdown("""
 
 .tile {
     background: white;
-    padding: 22px;
+    padding: 22px 26px;
     border-radius: 14px;
-    margin-bottom: 22px;
+    margin-bottom: 24px;
     box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+}
+
+.tile-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 12px;
 }
 
 .stButton > button {
@@ -48,9 +54,8 @@ st.markdown("""
 
 .btn-primary > button { background:#2563eb; color:white; }
 .btn-success > button { background:#16a34a; color:white; }
-.btn-danger > button { background:#dc2626; color:white; }
+.btn-danger > button  { background:#dc2626; color:white; }
 .btn-warning > button { background:#f59e0b; color:black; }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -62,48 +67,50 @@ with col2:
     if st.button("⚙️"):
         st.session_state.show_settings = not st.session_state.show_settings
 
-# ================= SETTINGS =================
+# ================= SETTINGS TILE =================
 if st.session_state.show_settings:
     st.markdown('<div class="tile">', unsafe_allow_html=True)
-    st.subheader("⚙️ API Configuration")
+    st.markdown('<div class="tile-title">⚙️ API Configuration</div>', unsafe_allow_html=True)
+
     st.session_state.AUTH_URL = st.text_input("Auth URL", st.session_state.AUTH_URL)
     st.session_state.BASE_URL = st.text_input("Base URL", st.session_state.BASE_URL)
-    st.session_state.START_DATE = st.text_input("Start Date", st.session_state.START_DATE)
+    st.session_state.START_DATE = st.text_input("Start Date (YYYY-MM-DD)", st.session_state.START_DATE)
+
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ================= LOGIN =================
+# ================= LOGIN TILE =================
 if not st.session_state.token:
     st.markdown('<div class="tile">', unsafe_allow_html=True)
-    st.header("🔐 Login")
+    st.markdown('<div class="tile-title">🔐 Login</div>', unsafe_allow_html=True)
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
     st.markdown('<div class="btn-primary">', unsafe_allow_html=True)
     if st.button("Generate Token"):
-        try:
-            payload = {
-                "username": username,
-                "password": password,
-                "grant_type": "password"
-            }
-            headers = {
-                "Authorization": CLIENT_AUTH,
-                "Content-Type": "application/x-www-form-urlencoded"
-            }
-            r = requests.post(st.session_state.AUTH_URL, data=payload, headers=headers)
+        payload = {
+            "username": username,
+            "password": password,
+            "grant_type": "password"
+        }
+        headers = {
+            "Authorization": CLIENT_AUTH,
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
 
-            if r.status_code != 200:
-                st.error("❌ Invalid credentials")
-            else:
+        try:
+            r = requests.post(st.session_state.AUTH_URL, data=payload, headers=headers)
+            if r.status_code == 200:
                 st.session_state.token = r.json()["access_token"]
                 st.session_state.username = username
                 st.success("✅ Login successful")
                 st.rerun()
+            else:
+                st.error("❌ Invalid credentials")
         except Exception:
-            st.error("❌ Login failed")
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+            st.error("❌ Authentication failed")
+
+    st.markdown('</div></div>', unsafe_allow_html=True)
     st.stop()
 
 # ================= AUTH HEADER =================
@@ -113,35 +120,43 @@ headers_auth = {
     "Accept": "application/json"
 }
 
-# ================= USER INFO =================
+# ================= USER INFO TILE =================
 st.markdown('<div class="tile">', unsafe_allow_html=True)
 st.success(f"👤 Logged in as **{st.session_state.username}**")
+
 st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
 if st.button("Logout"):
     st.session_state.clear()
     st.rerun()
 st.markdown('</div></div>', unsafe_allow_html=True)
 
-# ================= INSTRUCTIONS =================
+# ================= INSTRUCTIONS TILE =================
+st.markdown('<div class="tile">', unsafe_allow_html=True)
 st.info(
-    "📝 **Create:** Leave ID empty  \n"
+    "📝 **Create:** Leave ID empty\n\n"
     "✏️ **Update:** Provide ID"
 )
+st.markdown('</div>', unsafe_allow_html=True)
 
-# ================= UPLOAD =================
+# ================= UPLOAD TILE =================
 st.markdown('<div class="tile">', unsafe_allow_html=True)
-st.header("📤 Upload Paycode Events")
+st.markdown('<div class="tile-title">📤 Upload Paycode Events</div>', unsafe_allow_html=True)
 
 template_df = pd.DataFrame(columns=[
-    "id", "Paycode Event Name", "Description", "paycode_id",
-    "holiday_name", "holiday_date(DD-MM-YYYY)", "repeatWeek", "repeatWeekday"
+    "id",
+    "Paycode Event Name",
+    "Description",
+    "paycode_id",
+    "holiday_name",
+    "holiday_date(DD-MM-YYYY)",
+    "repeatWeek",
+    "repeatWeekday"
 ])
 
 st.download_button(
-    "⬇️ Download Template",
+    "⬇️ Download Upload Template",
     template_df.to_csv(index=False),
-    file_name="paycode_events_template.csv",
-    mime="text/csv"
+    "paycode_events_template.csv"
 )
 
 uploaded_file = st.file_uploader("Upload CSV / Excel", type=["csv", "xlsx"])
@@ -194,9 +209,9 @@ if uploaded_file:
 
 st.markdown('</div>', unsafe_allow_html=True)
 
-# ================= CREATE / UPDATE =================
+# ================= CREATE / UPDATE TILE =================
 st.markdown('<div class="tile">', unsafe_allow_html=True)
-st.header("🚀 Create / Update")
+st.markdown('<div class="tile-title">🚀 Create / Update Paycode Events</div>', unsafe_allow_html=True)
 
 st.markdown('<div class="btn-success">', unsafe_allow_html=True)
 if st.button("Submit Paycode Events"):
@@ -216,22 +231,23 @@ if st.button("Submit Paycode Events"):
 
 st.markdown('</div></div>', unsafe_allow_html=True)
 
-# ================= DELETE =================
+# ================= DELETE TILE =================
 st.markdown('<div class="tile">', unsafe_allow_html=True)
-st.header("🗑️ Delete Paycode Events")
+st.markdown('<div class="tile-title">🗑️ Delete Paycode Events</div>', unsafe_allow_html=True)
 
-ids_input = st.text_input("Enter IDs (comma-separated)")
+ids_input = st.text_input("Enter Paycode Event IDs (comma-separated)")
 
 st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
-if st.button("Delete"):
+if st.button("Delete Paycode Events"):
     for pid in [i.strip() for i in ids_input.split(",") if i.isdigit()]:
         r = requests.delete(f"{st.session_state.BASE_URL}/{pid}", headers=headers_auth)
-        st.write("✅ Deleted" if r.status_code in (200,204) else "❌ Failed", pid)
+        st.write("✅ Deleted" if r.status_code in (200, 204) else "❌ Failed", pid)
+
 st.markdown('</div></div>', unsafe_allow_html=True)
 
-# ================= DOWNLOAD =================
+# ================= DOWNLOAD TILE =================
 st.markdown('<div class="tile">', unsafe_allow_html=True)
-st.header("⬇️ Download Existing")
+st.markdown('<div class="tile-title">⬇️ Download Existing Paycode Events</div>', unsafe_allow_html=True)
 
 st.markdown('<div class="btn-warning">', unsafe_allow_html=True)
 if st.button("Fetch & Download"):
@@ -249,6 +265,10 @@ if st.button("Fetch & Download"):
             })
 
     df = pd.DataFrame(rows)
-    st.download_button("⬇️ Download CSV", df.to_csv(index=False), "paycode_events_export.csv")
+    st.download_button(
+        "⬇️ Download CSV",
+        df.to_csv(index=False),
+        "paycode_events_export.csv"
+    )
 
 st.markdown('</div></div>', unsafe_allow_html=True)
