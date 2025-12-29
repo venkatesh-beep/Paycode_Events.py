@@ -3,12 +3,12 @@ import requests
 import pandas as pd
 import csv
 import io
-import time
 
-# ---------------- CONFIG ----------------
-AUTH_URL = "https://saas-beeforce.labour.tech/authorization-server/oauth/token"
-BASE_URL = "https://saas-beeforce.labour.tech/resource-server/api/paycode_events"
-CLIENT_AUTH = "Basic ZXh0ZXJuYWwtY2xpZW50Ojg1dDQkS2JTWmtWRHNCdUQ="
+# ---------------- CONFIG (FROM SECRETS) ----------------
+AUTH_URL = st.secrets["AUTH_URL"]
+BASE_URL = st.secrets["BASE_URL"]
+CLIENT_AUTH = st.secrets["CLIENT_AUTH"]
+
 COMMON_START_DATE = "2026-01-01"
 
 st.set_page_config(page_title="Paycode Events", layout="wide")
@@ -17,6 +17,7 @@ st.title("Paycode Event Configuration")
 # ---------------- SESSION STATE ----------------
 if "token" not in st.session_state:
     st.session_state.token = None
+
 if "final_body" not in st.session_state:
     st.session_state.final_body = []
 
@@ -43,7 +44,7 @@ if st.button("Generate Token"):
         if r.status_code != 200:
             st.error("❌ Entered wrong credentials")
         else:
-            st.session_state.token = r.json().get("access_token")
+            st.session_state.token = r.json()["access_token"]
             st.success("✅ Token generated (valid for 30 minutes)")
     except Exception:
         st.error("❌ Entered wrong credentials")
@@ -57,8 +58,27 @@ headers_auth = {
     "Accept": "application/json"
 }
 
-# ---------------- FILE UPLOAD ----------------
+# ---------------- UPLOAD SECTION ----------------
 st.header("📤 Upload Paycode Events File")
+
+# ---- Download Template ----
+template_df = pd.DataFrame(columns=[
+    "id",
+    "name",
+    "description",
+    "paycode_id",
+    "holiday_name",
+    "holiday_date(DD-MM-YYYY)",
+    "repeatWeek",
+    "repeatWeekday"
+])
+
+st.download_button(
+    "⬇️ Download Upload Template",
+    template_df.to_csv(index=False),
+    file_name="paycode_events_template.csv",
+    mime="text/csv"
+)
 
 uploaded_file = st.file_uploader(
     "Upload CSV or Excel file",
@@ -105,6 +125,7 @@ if uploaded_file:
             }
             if raw_id:
                 base["id"] = int(raw_id)
+
             store[unique_key] = base
 
         store[unique_key]["schedules"].append({
@@ -137,14 +158,14 @@ if st.button("Submit Paycode Events"):
                 )
                 if r.status_code in (200, 201):
                     success += 1
-                    st.write(f"✅ Updated {payload['id']}")
+                    st.write(f"✅ Updated ID {payload['id']}")
                 else:
                     failed += 1
             else:
                 r = requests.post(BASE_URL, headers=headers_auth, json=payload)
                 if r.status_code in (200, 201):
                     success += 1
-                    st.write(f"✅ Created {r.json().get('id')}")
+                    st.write(f"✅ Created ID {r.json().get('id')}")
                 else:
                     failed += 1
         except Exception:
@@ -166,10 +187,10 @@ if st.button("Delete Paycode Events"):
         else:
             st.write(f"❌ Failed to delete {pid}")
 
-# ---------------- DOWNLOAD ----------------
+# ---------------- DOWNLOAD EXISTING EVENTS ----------------
 st.header("⬇️ Download Existing Paycode Events")
 
-if st.button("Fetch & Download"):
+try:
     r = requests.get(BASE_URL, headers=headers_auth)
     rows = []
 
@@ -190,9 +211,13 @@ if st.button("Fetch & Download"):
             })
 
     df = pd.DataFrame(rows)
+
     st.download_button(
-        "Download CSV",
+        "⬇️ Download Paycode Events",
         df.to_csv(index=False),
         file_name="paycode_events_export.csv",
         mime="text/csv"
     )
+
+except Exception:
+    st.error("❌ Failed to fetch Paycode Events")
