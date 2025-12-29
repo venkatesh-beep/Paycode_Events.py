@@ -52,6 +52,7 @@ if st.session_state.show_settings:
 # ================= LOGIN =================
 if not st.session_state.token:
     st.header("🔐 Login")
+
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
@@ -105,7 +106,6 @@ st.info(
 # ================= UPLOAD SECTION =================
 st.header("📤 Upload Paycode Events File")
 
-# ---- Upload Template ----
 template_df = pd.DataFrame(columns=[
     "id",
     "Paycode Event Name",
@@ -145,8 +145,8 @@ if uploaded_file:
         description = str(row.get("Description", "")).strip() or name
         paycode_id = int(row.get("paycode_id"))
         holiday_name = str(row.get("holiday_name", "")).strip()
-
         holiday_date = str(row.get("holiday_date(DD-MM-YYYY)", "")).strip()
+
         repeat_week = str(row.get("repeatWeek", "")).strip() or "*"
         repeat_weekday = str(row.get("repeatWeekday", "")).strip() or "*"
 
@@ -178,4 +178,89 @@ if uploaded_file:
         })
 
     st.session_state.final_body = list(store.values())
-    st.success(f"✅ File processed successfully. Total Paycode Events: {len(st.session_state.final_body)}")
+    st.success(f"✅ File processed. Total Paycode Events: {len(st.session_state.final_body)}")
+
+# ================= CREATE / UPDATE =================
+st.header("🚀 Create / Update Paycode Events")
+
+if st.button("Submit Paycode Events"):
+    success = 0
+    failed = 0
+
+    for payload in st.session_state.final_body:
+        try:
+            if payload.get("id"):
+                r = requests.put(
+                    f"{st.session_state.BASE_URL}/{payload['id']}",
+                    headers=headers_auth,
+                    json=payload
+                )
+                if r.status_code in (200, 201):
+                    success += 1
+                    st.write(f"✅ Updated ID {payload['id']}")
+                else:
+                    failed += 1
+            else:
+                r = requests.post(
+                    st.session_state.BASE_URL,
+                    headers=headers_auth,
+                    json=payload
+                )
+                if r.status_code in (200, 201):
+                    success += 1
+                    st.write(f"✅ Created ID {r.json().get('id')}")
+                else:
+                    failed += 1
+        except Exception:
+            failed += 1
+
+    st.info(f"Summary → Success: {success}, Failed: {failed}")
+
+# ================= DELETE (UNCHANGED) =================
+st.header("🗑️ Delete Paycode Events")
+
+ids_input = st.text_input("Enter Paycode Event IDs (comma-separated)")
+
+if st.button("Delete Paycode Events"):
+    ids = [i.strip() for i in ids_input.split(",") if i.strip().isdigit()]
+    for pid in ids:
+        r = requests.delete(
+            f"{st.session_state.BASE_URL}/{pid}",
+            headers=headers_auth
+        )
+        if r.status_code in (200, 204):
+            st.write(f"✅ Paycode Event deleted {pid}")
+        else:
+            st.write(f"❌ Failed to delete {pid}")
+
+# ================= FETCH & DOWNLOAD (UNCHANGED) =================
+st.header("⬇️ Download Existing Paycode Events")
+
+if st.button("Fetch & Download"):
+    r = requests.get(st.session_state.BASE_URL, headers=headers_auth)
+    rows = []
+
+    for event in r.json():
+        for sch in event.get("schedules", []):
+            try:
+                date = f"{int(sch['repeatDay']):02d}-{int(sch['repeatMonth']):02d}-{int(sch['repeatYear'])}"
+            except Exception:
+                date = ""
+
+            rows.append({
+                "id": event.get("id"),
+                "name": event.get("name"),
+                "description": event.get("description"),
+                "paycode_id": event.get("paycode", {}).get("id"),
+                "holiday_name": sch.get("name"),
+                "holiday_date(DD-MM-YYYY)": date
+            })
+
+    df = pd.DataFrame(rows)
+
+    st.download_button(
+        "⬇️ Download CSV",
+        df.to_csv(index=False),
+        file_name="paycode_events_export.csv",
+        mime="text/csv"
+    )
