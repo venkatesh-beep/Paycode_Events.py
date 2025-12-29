@@ -12,7 +12,7 @@ CLIENT_AUTH = "Basic ZXh0ZXJuYWwtY2xpZW50Ojg1dDQkS2JTWmtWRHNCdUQ="
 COMMON_START_DATE = "2026-01-01"
 
 st.set_page_config(page_title="Paycode Events", layout="wide")
-st.title("Paycode Events Management")
+st.title("Paycode Event Configuration")
 
 # ---------------- SESSION STATE ----------------
 if "token" not in st.session_state:
