@@ -4,64 +4,120 @@ import pandas as pd
 import csv
 import io
 
-# ---------------- CONFIG (FROM SECRETS) ----------------
-AUTH_URL = st.secrets["AUTH_URL"]
-BASE_URL = st.secrets["BASE_URL"]
+# ---------------- DEFAULT CONFIG ----------------
+DEFAULT_AUTH_URL = "https://saas-beeforce.labour.tech/authorization-server/oauth/token"
+DEFAULT_BASE_URL = "https://saas-beeforce.labour.tech/resource-server/api/paycode_events"
+DEFAULT_START_DATE = "2026-01-01"
+
 CLIENT_AUTH = st.secrets["CLIENT_AUTH"]
 
-COMMON_START_DATE = "2026-01-01"
-
-st.set_page_config(page_title="Paycode Events", layout="wide")
-st.title("Paycode Event Configuration")
-
-# ---------------- SESSION STATE ----------------
+# ---------------- SESSION STATE INIT ----------------
 if "token" not in st.session_state:
     st.session_state.token = None
+
+if "username" not in st.session_state:
+    st.session_state.username = None
 
 if "final_body" not in st.session_state:
     st.session_state.final_body = []
 
-# ---------------- LOGIN ----------------
-st.header("🔐 Login")
+if "AUTH_URL" not in st.session_state:
+    st.session_state.AUTH_URL = DEFAULT_AUTH_URL
 
-username = st.text_input("Username")
-password = st.text_input("Password", type="password")
+if "BASE_URL" not in st.session_state:
+    st.session_state.BASE_URL = DEFAULT_BASE_URL
 
-if st.button("Generate Token"):
-    try:
-        payload = {
-            "username": username,
-            "password": password,
-            "grant_type": "password"
-        }
-        headers = {
-            "Authorization": CLIENT_AUTH,
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
+if "COMMON_START_DATE" not in st.session_state:
+    st.session_state.COMMON_START_DATE = DEFAULT_START_DATE
 
-        r = requests.post(AUTH_URL, data=payload, headers=headers)
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(page_title="Paycode Events", layout="wide")
 
-        if r.status_code != 200:
-            st.error("❌ Entered wrong credentials")
-        else:
-            st.session_state.token = r.json()["access_token"]
-            st.success("✅ Token generated (valid for 30 minutes)")
-    except Exception:
-        st.error("❌ Entered wrong credentials")
+# ================= SIDEBAR (SETTINGS + LOGOUT) =================
+with st.sidebar:
+    st.title("⚙️ Settings")
 
+    if st.session_state.token:
+        st.write(f"👤 **Logged in as:** `{st.session_state.username}`")
+
+        st.subheader("API Configuration")
+
+        st.session_state.AUTH_URL = st.text_input(
+            "Auth URL",
+            value=st.session_state.AUTH_URL
+        )
+
+        st.session_state.BASE_URL = st.text_input(
+            "Base URL",
+            value=st.session_state.BASE_URL
+        )
+
+        st.session_state.COMMON_START_DATE = st.text_input(
+            "Common Start Date (YYYY-MM-DD)",
+            value=st.session_state.COMMON_START_DATE
+        )
+
+        st.divider()
+
+        if st.button("🚪 Logout"):
+            st.session_state.token = None
+            st.session_state.username = None
+            st.session_state.final_body = []
+            st.success("Logged out successfully")
+            st.rerun()
+
+# ================= HEADER =================
+st.title("Paycode Event Configuration")
+
+# ================= LOGIN =================
 if not st.session_state.token:
+    st.header("🔐 Login")
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Generate Token"):
+        try:
+            payload = {
+                "username": username,
+                "password": password,
+                "grant_type": "password"
+            }
+
+            headers = {
+                "Authorization": CLIENT_AUTH,
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
+
+            r = requests.post(
+                st.session_state.AUTH_URL,
+                data=payload,
+                headers=headers
+            )
+
+            if r.status_code != 200:
+                st.error("❌ Entered wrong credentials")
+            else:
+                st.session_state.token = r.json()["access_token"]
+                st.session_state.username = username
+                st.success("✅ Token generated (valid for 30 minutes)")
+                st.rerun()
+
+        except Exception:
+            st.error("❌ Entered wrong credentials")
+
     st.stop()
 
+# ================= AUTH HEADER =================
 headers_auth = {
     "Authorization": f"Bearer {st.session_state.token}",
     "Content-Type": "application/json;charset=UTF-8",
     "Accept": "application/json"
 }
 
-# ---------------- UPLOAD SECTION ----------------
+# ================= UPLOAD SECTION =================
 st.header("📤 Upload Paycode Events File")
 
-# ---- Download Template ----
 template_df = pd.DataFrame(columns=[
     "id",
     "name",
@@ -130,7 +186,7 @@ if uploaded_file:
 
         store[unique_key]["schedules"].append({
             "name": holiday_name,
-            "startDate": COMMON_START_DATE,
+            "startDate": st.session_state.COMMON_START_DATE,
             "repeatDay": int(day),
             "repeatMonth": int(month),
             "repeatYear": int(year),
@@ -141,7 +197,7 @@ if uploaded_file:
     st.session_state.final_body = list(store.values())
     st.success(f"✅ File processed. Total Paycode Events: {len(st.session_state.final_body)}")
 
-# ---------------- CREATE / UPDATE ----------------
+# ================= CREATE / UPDATE =================
 st.header("🚀 Create / Update Paycode Events")
 
 if st.button("Submit Paycode Events"):
@@ -152,7 +208,7 @@ if st.button("Submit Paycode Events"):
         try:
             if payload.get("id"):
                 r = requests.put(
-                    f"{BASE_URL}/{payload['id']}",
+                    f"{st.session_state.BASE_URL}/{payload['id']}",
                     headers=headers_auth,
                     json=payload
                 )
@@ -162,7 +218,11 @@ if st.button("Submit Paycode Events"):
                 else:
                     failed += 1
             else:
-                r = requests.post(BASE_URL, headers=headers_auth, json=payload)
+                r = requests.post(
+                    st.session_state.BASE_URL,
+                    headers=headers_auth,
+                    json=payload
+                )
                 if r.status_code in (200, 201):
                     success += 1
                     st.write(f"✅ Created ID {r.json().get('id')}")
@@ -173,7 +233,7 @@ if st.button("Submit Paycode Events"):
 
     st.info(f"Summary → Success: {success}, Failed: {failed}")
 
-# ---------------- DELETE ----------------
+# ================= DELETE =================
 st.header("🗑️ Delete Paycode Events")
 
 ids_input = st.text_input("Enter Paycode Event IDs (comma-separated)")
@@ -181,17 +241,20 @@ ids_input = st.text_input("Enter Paycode Event IDs (comma-separated)")
 if st.button("Delete Paycode Events"):
     ids = [i.strip() for i in ids_input.split(",") if i.strip().isdigit()]
     for pid in ids:
-        r = requests.delete(f"{BASE_URL}/{pid}", headers=headers_auth)
+        r = requests.delete(
+            f"{st.session_state.BASE_URL}/{pid}",
+            headers=headers_auth
+        )
         if r.status_code in (200, 204):
             st.write(f"✅ Paycode Event deleted {pid}")
         else:
             st.write(f"❌ Failed to delete {pid}")
 
-# ---------------- DOWNLOAD EXISTING EVENTS ----------------
+# ================= DOWNLOAD =================
 st.header("⬇️ Download Existing Paycode Events")
 
 try:
-    r = requests.get(BASE_URL, headers=headers_auth)
+    r = requests.get(st.session_state.BASE_URL, headers=headers_auth)
     rows = []
 
     for event in r.json():
