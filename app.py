@@ -63,12 +63,17 @@ if not st.session_state.token:
             "password": password,
             "grant_type": "password"
         }
+
         headers = {
             "Authorization": CLIENT_AUTH,
             "Content-Type": "application/x-www-form-urlencoded"
         }
 
-        r = requests.post(st.session_state.AUTH_URL, data=payload, headers=headers)
+        r = requests.post(
+            st.session_state.AUTH_URL,
+            data=payload,
+            headers=headers
+        )
 
         if r.status_code != 200:
             st.error("❌ Invalid credentials")
@@ -87,7 +92,7 @@ headers_auth = {
     "Accept": "application/json"
 }
 
-# ================= HELPER : FETCH PAYCODES =================
+# ================= HELPER: FETCH PAYCODES =================
 def fetch_paycodes(headers_auth, base_url):
     url = base_url.replace("paycode_events", "paycodes")
     r = requests.get(url, headers=headers_auth)
@@ -124,22 +129,23 @@ template_df = pd.DataFrame(columns=[
     "repeatWeekday"
 ])
 
-# ================= TEMPLATE DOWNLOAD (2 SHEETS) =================
+# ================= TEMPLATE DOWNLOAD =================
 st.markdown("### 📥 Download Upload Template")
 
-col_a, col_b = st.columns([0.7, 0.3])
-with col_a:
+col1, col2 = st.columns([0.7, 0.3])
+
+with col1:
     st.caption(
-        "• **Sheet 1:** Paycode Events Upload\n"
-        "• **Sheet 2:** Paycodes Reference (Auto-fetched)"
+        "• Sheet 1 → Paycode Events Upload\n"
+        "• Sheet 2 → Paycodes Reference (Auto-fetched)"
     )
 
-with col_b:
+with col2:
     if st.button("⬇️ Download Template", use_container_width=True):
         paycodes_df = fetch_paycodes(headers_auth, st.session_state.BASE_URL)
 
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
             template_df.to_excel(writer, index=False, sheet_name="Paycode Events")
             paycodes_df.to_excel(writer, index=False, sheet_name="Paycodes")
 
@@ -157,7 +163,9 @@ if uploaded_file:
     store = {}
 
     if uploaded_file.name.endswith(".csv"):
-        reader = csv.DictReader(io.StringIO(uploaded_file.getvalue().decode("utf-8")))
+        reader = csv.DictReader(
+            io.StringIO(uploaded_file.getvalue().decode("utf-8"))
+        )
         rows = list(reader)
     else:
         df = pd.read_excel(uploaded_file)
@@ -174,7 +182,7 @@ if uploaded_file:
         if not name or not holiday_name or not holiday_date:
             continue
 
-        d, m, y = holiday_date.split("-")
+        day, month, year = holiday_date.split("-")
         key = raw_id if raw_id else name
 
         if key not in store:
@@ -190,9 +198,9 @@ if uploaded_file:
         store[key]["schedules"].append({
             "name": holiday_name,
             "startDate": st.session_state.START_DATE,
-            "repeatDay": int(d),
-            "repeatMonth": int(m),
-            "repeatYear": int(y),
+            "repeatDay": int(day),
+            "repeatMonth": int(month),
+            "repeatYear": int(year),
             "repeatWeek": "*",
             "repeatWeekday": "*"
         })
@@ -232,11 +240,14 @@ if st.button("Submit Paycode Events", use_container_width=True):
 # ================= DELETE =================
 st.subheader("🗑️ Delete Paycode Events")
 
-ids_input = st.text_input("Enter IDs (comma-separated)")
+ids_input = st.text_input("Enter Paycode Event IDs (comma-separated)")
 
 if st.button("Delete", use_container_width=True):
     for pid in [i.strip() for i in ids_input.split(",") if i.isdigit()]:
-        r = requests.delete(f"{st.session_state.BASE_URL}/{pid}", headers=headers_auth)
+        r = requests.delete(
+            f"{st.session_state.BASE_URL}/{pid}",
+            headers=headers_auth
+        )
         if r.status_code in (200, 204):
             st.success(f"Deleted {pid}")
         else:
