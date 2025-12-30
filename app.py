@@ -4,6 +4,13 @@ import pandas as pd
 import csv
 import io
 
+# ================= PAGE CONFIG =================
+st.set_page_config(
+    page_title="Paycode Events",
+    page_icon="🧾",
+    layout="wide"
+)
+
 # ================= DEFAULT CONFIG =================
 DEFAULT_AUTH_URL = "https://saas-beeforce.labour.tech/authorization-server/oauth/token"
 DEFAULT_BASE_URL = "https://saas-beeforce.labour.tech/resource-server/api/paycode_events"
@@ -12,90 +19,65 @@ DEFAULT_START_DATE = "2026-01-01"
 CLIENT_AUTH = st.secrets["CLIENT_AUTH"]
 
 # ================= SESSION STATE =================
-if "token" not in st.session_state:
-    st.session_state.token = None
+def init(key, value):
+    if key not in st.session_state:
+        st.session_state[key] = value
 
-if "username" not in st.session_state:
-    st.session_state.username = None
+init("token", None)
+init("username", None)
+init("final_body", [])
+init("AUTH_URL", DEFAULT_AUTH_URL)
+init("BASE_URL", DEFAULT_BASE_URL)
+init("START_DATE", DEFAULT_START_DATE)
 
-if "final_body" not in st.session_state:
-    st.session_state.final_body = []
+# ================= SIDEBAR =================
+with st.sidebar:
+    st.title("⚙️ Settings")
 
-if "show_settings" not in st.session_state:
-    st.session_state.show_settings = False
+    st.text_input("Auth URL", key="AUTH_URL")
+    st.text_input("Base URL", key="BASE_URL")
+    st.text_input("Default Start Date", key="START_DATE")
 
-if "AUTH_URL" not in st.session_state:
-    st.session_state.AUTH_URL = DEFAULT_AUTH_URL
-
-if "BASE_URL" not in st.session_state:
-    st.session_state.BASE_URL = DEFAULT_BASE_URL
-
-if "START_DATE" not in st.session_state:
-    st.session_state.START_DATE = DEFAULT_START_DATE
-
-# ================= PAGE CONFIG =================
-st.set_page_config(
-    page_title="Paycode Events",
-    layout="wide"
-)
-
-# ================= TOP BAR =================
-col1, col2 = st.columns([0.9, 0.1])
-
-with col1:
-    st.title("🧾 Paycode Event Configuration")
-
-with col2:
-    if st.button("⚙️", help="Settings"):
-        st.session_state.show_settings = not st.session_state.show_settings
-
-# ================= SETTINGS PANEL =================
-if st.session_state.show_settings:
-    st.markdown("### ⚙️ API Configuration")
-    st.session_state.AUTH_URL = st.text_input("Auth URL", st.session_state.AUTH_URL)
-    st.session_state.BASE_URL = st.text_input("Base URL", st.session_state.BASE_URL)
-    st.session_state.START_DATE = st.text_input(
-        "Start Date of the Event (YYYY-MM-DD)",
-        st.session_state.START_DATE
-    )
     st.divider()
+
+    if st.session_state.token:
+        st.success(f"Logged in as\n**{st.session_state.username}**")
+        if st.button("🚪 Logout"):
+            st.session_state.clear()
+            st.rerun()
+
+# ================= HEADER =================
+st.title("🧾 Paycode Event Configuration")
+st.caption("Create, Update, Delete & Download Paycode Events")
 
 # ================= LOGIN =================
 if not st.session_state.token:
-    st.header("🔐 Login")
+    st.subheader("🔐 Login")
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
     if st.button("Generate Token"):
-        try:
-            payload = {
-                "username": username,
-                "password": password,
-                "grant_type": "password"
-            }
+        payload = {
+            "username": username,
+            "password": password,
+            "grant_type": "password"
+        }
 
-            headers = {
-                "Authorization": CLIENT_AUTH,
-                "Content-Type": "application/x-www-form-urlencoded"
-            }
+        headers = {
+            "Authorization": CLIENT_AUTH,
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
 
-            r = requests.post(
-                st.session_state.AUTH_URL,
-                data=payload,
-                headers=headers
-            )
+        r = requests.post(st.session_state.AUTH_URL, data=payload, headers=headers)
 
-            if r.status_code != 200:
-                st.error("❌ Entered wrong credentials")
-            else:
-                st.session_state.token = r.json()["access_token"]
-                st.session_state.username = username
-                st.success("✅ Login successful (token valid for 30 minutes)")
-                st.rerun()
-
-        except Exception:
-            st.error("❌ Entered wrong credentials")
+        if r.status_code != 200:
+            st.error("❌ Invalid credentials")
+        else:
+            st.session_state.token = r.json()["access_token"]
+            st.session_state.username = username
+            st.success("✅ Login successful")
+            st.rerun()
 
     st.stop()
 
@@ -106,23 +88,14 @@ headers_auth = {
     "Accept": "application/json"
 }
 
-# ================= USER INFO =================
-st.success(f"👤 Logged in as **{st.session_state.username}**")
-
-if st.button("🚪 Logout"):
-    st.session_state.clear()
-    st.rerun()
-
-st.divider()
-
-# ================= INSTRUCTIONS =================
+# ================= INFO =================
 st.info(
-    "**To create a Paycode Event, do not enter the ID.**\n\n"
-    "**To update an existing Paycode Event, enter the ID.**"
+    "• **Create** → Leave `id` empty\n"
+    "• **Update** → Provide `id`"
 )
 
-# ================= UPLOAD SECTION =================
-st.header("📤 Upload Paycode Events File")
+# ================= UPLOAD =================
+st.subheader("📤 Upload Paycode Events")
 
 template_df = pd.DataFrame(columns=[
     "id",
@@ -136,24 +109,19 @@ template_df = pd.DataFrame(columns=[
 ])
 
 st.download_button(
-    "⬇️ Download Upload Template",
+    "⬇️ Download Template",
     template_df.to_csv(index=False),
-    file_name="paycode_events_template.csv",
-    mime="text/csv"
+    "paycode_events_template.csv",
+    "text/csv"
 )
 
-uploaded_file = st.file_uploader(
-    "Upload CSV or Excel file",
-    type=["csv", "xlsx", "xls"]
-)
+uploaded_file = st.file_uploader("Upload CSV / Excel", ["csv", "xlsx", "xls"])
 
 if uploaded_file:
     store = {}
 
     if uploaded_file.name.endswith(".csv"):
-        reader = csv.DictReader(
-            io.StringIO(uploaded_file.getvalue().decode("utf-8"))
-        )
+        reader = csv.DictReader(io.StringIO(uploaded_file.getvalue().decode("utf-8")))
         rows = list(reader)
     else:
         df = pd.read_excel(uploaded_file)
@@ -166,113 +134,92 @@ if uploaded_file:
         paycode_id = int(row.get("paycode_id"))
         holiday_name = str(row.get("holiday_name", "")).strip()
         holiday_date = str(row.get("holiday_date(DD-MM-YYYY)", "")).strip()
-        repeat_week = str(row.get("repeatWeek", "")).strip() or "*"
-        repeat_weekday = str(row.get("repeatWeekday", "")).strip() or "*"
 
         if not name or not holiday_name or not holiday_date:
             continue
 
-        day, month, year = holiday_date.split("-")
+        d, m, y = holiday_date.split("-")
+        key = raw_id if raw_id else name
 
-        unique_key = raw_id if raw_id else name
-
-        if unique_key not in store:
-            base = {
+        if key not in store:
+            store[key] = {
                 "name": name,
                 "description": description,
                 "paycode": {"id": paycode_id},
                 "schedules": []
             }
             if raw_id:
-                base["id"] = int(raw_id)
+                store[key]["id"] = int(raw_id)
 
-            store[unique_key] = base
-
-        store[unique_key]["schedules"].append({
+        store[key]["schedules"].append({
             "name": holiday_name,
             "startDate": st.session_state.START_DATE,
-            "repeatDay": int(day),
-            "repeatMonth": int(month),
-            "repeatYear": int(year),
-            "repeatWeek": repeat_week,
-            "repeatWeekday": repeat_weekday
+            "repeatDay": int(d),
+            "repeatMonth": int(m),
+            "repeatYear": int(y),
+            "repeatWeek": "*",
+            "repeatWeekday": "*"
         })
 
     st.session_state.final_body = list(store.values())
-    st.success(f"✅ File processed. Total Paycode Events: {len(st.session_state.final_body)}")
+    st.success(f"✅ Loaded {len(store)} Paycode Events")
 
-# ================= CREATE / UPDATE =================
-st.header("🚀 Create / Update Paycode Events")
+# ================= SUBMIT =================
+st.subheader("🚀 Create / Update")
 
 if st.button("Submit Paycode Events"):
-    success = 0
-    failed = 0
+    ok, fail = 0, 0
 
     for payload in st.session_state.final_body:
-        try:
-            if payload.get("id"):
-                r = requests.put(
-                    f"{st.session_state.BASE_URL}/{payload['id']}",
-                    headers=headers_auth,
-                    json=payload
-                )
-                if r.status_code in (200, 201):
-                    success += 1
-                    st.write(f"✅ Updated ID {payload['id']}")
-                else:
-                    failed += 1
-            else:
-                r = requests.post(
-                    st.session_state.BASE_URL,
-                    headers=headers_auth,
-                    json=payload
-                )
-                if r.status_code in (200, 201):
-                    success += 1
-                    st.write(f"✅ Created ID {r.json().get('id')}")
-                else:
-                    failed += 1
-        except Exception:
-            failed += 1
+        if payload.get("id"):
+            r = requests.put(
+                f"{st.session_state.BASE_URL}/{payload['id']}",
+                headers=headers_auth,
+                json=payload
+            )
+        else:
+            r = requests.post(
+                st.session_state.BASE_URL,
+                headers=headers_auth,
+                json=payload
+            )
 
-    st.info(f"Summary → Success: {success}, Failed: {failed}")
+        if r.status_code in (200, 201):
+            ok += 1
+        else:
+            fail += 1
+
+    st.success(f"✅ Success: {ok}")
+    if fail:
+        st.error(f"❌ Failed: {fail}")
 
 # ================= DELETE =================
-st.header("🗑️ Delete Paycode Events")
+st.subheader("🗑️ Delete Paycode Events")
 
-ids_input = st.text_input("Enter Paycode Event IDs (comma-separated)")
+ids_input = st.text_input("IDs (comma-separated)")
 
-if st.button("Delete Paycode Events"):
-    ids = [i.strip() for i in ids_input.split(",") if i.strip().isdigit()]
-
-    for pid in ids:
-        r = requests.delete(
-            f"{st.session_state.BASE_URL}/{pid}",
-            headers=headers_auth
-        )
+if st.button("Delete"):
+    for pid in [i.strip() for i in ids_input.split(",") if i.isdigit()]:
+        r = requests.delete(f"{st.session_state.BASE_URL}/{pid}", headers=headers_auth)
         if r.status_code in (200, 204):
-            st.write(f"✅ Paycode Event deleted {pid}")
+            st.success(f"Deleted {pid}")
         else:
-            st.write(f"❌ Failed to delete {pid}")
+            st.error(f"Failed {pid}")
 
-# ================= FETCH & AUTO DOWNLOAD =================
-st.header("⬇️ Download Existing Paycode Events")
+# ================= AUTO DOWNLOAD =================
+st.subheader("⬇️ Download Existing Paycode Events")
 
 if st.button("Download Existing Paycode Events"):
     r = requests.get(st.session_state.BASE_URL, headers=headers_auth)
 
     if r.status_code != 200:
-        st.error("❌ Failed to fetch Paycode Events")
+        st.error("❌ Failed to fetch")
     else:
         rows = []
 
         for event in r.json():
             for sch in event.get("schedules", []):
-                try:
-                    date = f"{int(sch['repeatDay']):02d}-{int(sch['repeatMonth']):02d}-{int(sch['repeatYear'])}"
-                except Exception:
-                    date = ""
-
+                date = f"{sch.get('repeatDay', ''):02d}-{sch.get('repeatMonth', ''):02d}-{sch.get('repeatYear', '')}"
                 rows.append({
                     "id": event.get("id"),
                     "name": event.get("name"),
@@ -283,11 +230,10 @@ if st.button("Download Existing Paycode Events"):
                 })
 
         df = pd.DataFrame(rows)
-        csv_data = df.to_csv(index=False)
 
         st.download_button(
-            label="⬇️ Download CSV",
-            data=csv_data,
-            file_name="paycode_events_export.csv",
-            mime="text/csv"
+            "⬇️ Download CSV Now",
+            df.to_csv(index=False),
+            "paycode_events_export.csv",
+            "text/csv"
         )
