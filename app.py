@@ -69,11 +69,7 @@ if not st.session_state.token:
             "Content-Type": "application/x-www-form-urlencoded"
         }
 
-        r = requests.post(
-            st.session_state.AUTH_URL,
-            data=payload,
-            headers=headers
-        )
+        r = requests.post(st.session_state.AUTH_URL, data=payload, headers=headers)
 
         if r.status_code != 200:
             st.error("❌ Invalid credentials")
@@ -93,18 +89,18 @@ headers_auth = {
 }
 
 # ================= HELPER: FETCH PAYCODES =================
+# 🔴 UPDATED HERE: id + code → paycode
 def fetch_paycodes(headers_auth, base_url):
     url = base_url.replace("paycode_events", "paycodes")
     r = requests.get(url, headers=headers_auth)
 
     if r.status_code != 200:
-        return pd.DataFrame(columns=["id", "name", "description"])
+        return pd.DataFrame(columns=["id", "paycode"])
 
     return pd.DataFrame([
         {
             "id": p.get("id"),
-            "name": p.get("name"),
-            "description": p.get("description")
+            "paycode": p.get("code")
         }
         for p in r.json()
     ])
@@ -137,7 +133,7 @@ col1, col2 = st.columns([0.7, 0.3])
 with col1:
     st.caption(
         "• Sheet 1 → Paycode Events Upload\n"
-        "• Sheet 2 → Paycodes Reference (Auto-fetched)"
+        "• Sheet 2 → Paycodes Reference (id + paycode)"
     )
 
 with col2:
@@ -163,9 +159,7 @@ if uploaded_file:
     store = {}
 
     if uploaded_file.name.endswith(".csv"):
-        reader = csv.DictReader(
-            io.StringIO(uploaded_file.getvalue().decode("utf-8"))
-        )
+        reader = csv.DictReader(io.StringIO(uploaded_file.getvalue().decode("utf-8")))
         rows = list(reader)
     else:
         df = pd.read_excel(uploaded_file)
@@ -182,7 +176,7 @@ if uploaded_file:
         if not name or not holiday_name or not holiday_date:
             continue
 
-        day, month, year = holiday_date.split("-")
+        d, m, y = holiday_date.split("-")
         key = raw_id if raw_id else name
 
         if key not in store:
@@ -198,9 +192,9 @@ if uploaded_file:
         store[key]["schedules"].append({
             "name": holiday_name,
             "startDate": st.session_state.START_DATE,
-            "repeatDay": int(day),
-            "repeatMonth": int(month),
-            "repeatYear": int(year),
+            "repeatDay": int(d),
+            "repeatMonth": int(m),
+            "repeatYear": int(y),
             "repeatWeek": "*",
             "repeatWeekday": "*"
         })
@@ -244,10 +238,7 @@ ids_input = st.text_input("Enter Paycode Event IDs (comma-separated)")
 
 if st.button("Delete", use_container_width=True):
     for pid in [i.strip() for i in ids_input.split(",") if i.isdigit()]:
-        r = requests.delete(
-            f"{st.session_state.BASE_URL}/{pid}",
-            headers=headers_auth
-        )
+        r = requests.delete(f"{st.session_state.BASE_URL}/{pid}", headers=headers_auth)
         if r.status_code in (200, 204):
             st.success(f"Deleted {pid}")
         else:
