@@ -63,7 +63,6 @@ if not st.session_state.token:
             "password": password,
             "grant_type": "password"
         }
-
         headers = {
             "Authorization": CLIENT_AUTH,
             "Content-Type": "application/x-www-form-urlencoded"
@@ -88,8 +87,7 @@ headers_auth = {
     "Accept": "application/json"
 }
 
-# ================= HELPER: FETCH PAYCODES =================
-# 🔴 UPDATED HERE: id + code → paycode
+# ================= FETCH PAYCODES =================
 def fetch_paycodes(headers_auth, base_url):
     url = base_url.replace("paycode_events", "paycodes")
     r = requests.get(url, headers=headers_auth)
@@ -176,7 +174,7 @@ if uploaded_file:
         if not name or not holiday_name or not holiday_date:
             continue
 
-        d, m, y = holiday_date.split("-")
+        day, month, year = holiday_date.split("-")
         key = raw_id if raw_id else name
 
         if key not in store:
@@ -192,9 +190,9 @@ if uploaded_file:
         store[key]["schedules"].append({
             "name": holiday_name,
             "startDate": st.session_state.START_DATE,
-            "repeatDay": int(d),
-            "repeatMonth": int(m),
-            "repeatYear": int(y),
+            "repeatDay": int(day),
+            "repeatMonth": int(month),
+            "repeatYear": int(year),
             "repeatWeek": "*",
             "repeatWeekday": "*"
         })
@@ -254,9 +252,19 @@ if st.button("Download Existing Paycode Events", use_container_width=True):
         st.error("❌ Failed to fetch Paycode Events")
     else:
         rows = []
+
         for event in r.json():
             for sch in event.get("schedules", []):
-                date = f"{int(sch['repeatDay']):02d}-{int(sch['repeatMonth']):02d}-{int(sch['repeatYear'])}"
+
+                rd = sch.get("repeatDay")
+                rm = sch.get("repeatMonth")
+                ry = sch.get("repeatYear")
+
+                if str(rd).isdigit() and str(rm).isdigit() and str(ry).isdigit():
+                    date = f"{int(rd):02d}-{int(rm):02d}-{int(ry)}"
+                else:
+                    date = ""
+
                 rows.append({
                     "id": event.get("id"),
                     "name": event.get("name"),
@@ -269,8 +277,8 @@ if st.button("Download Existing Paycode Events", use_container_width=True):
         df = pd.DataFrame(rows)
 
         st.download_button(
-            "⬇️ Download CSV",
-            df.to_csv(index=False),
-            "paycode_events_export.csv",
-            "text/csv"
+            "⬇️ Download CSV Now",
+            data=df.to_csv(index=False),
+            file_name="paycode_events_export.csv",
+            mime="text/csv"
         )
