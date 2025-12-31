@@ -30,7 +30,7 @@ init("AUTH_URL", DEFAULT_AUTH_URL)
 init("BASE_URL", DEFAULT_BASE_URL)
 init("START_DATE", DEFAULT_START_DATE)
 
-# ================= DATE PARSER (NO FUNCTIONAL CHANGE, ONLY SAFETY) =================
+# ================= DATE PARSER (FIX ONLY) =================
 def parse_date(value):
     if value is None or str(value).strip() == "":
         return None
@@ -43,14 +43,13 @@ def parse_date(value):
     for sep in ["-", "/"]:
         parts = val.split(sep)
         if len(parts) == 3:
-            if len(parts[0]) == 4:   # YYYY-MM-DD
+            if len(parts[0]) == 4:  # YYYY-MM-DD
                 y, m, d = parts
-            else:                    # DD-MM-YYYY
+            else:                   # DD-MM-YYYY
                 d, m, y = parts
 
             if d.isdigit() and m.isdigit() and y.isdigit():
                 return int(d), int(m), int(y)
-
     return None
 
 # ================= SIDEBAR =================
@@ -60,11 +59,9 @@ with st.sidebar:
     st.text_input("Base URL", key="BASE_URL")
     st.text_input("Default Start Date", key="START_DATE")
 
-    st.divider()
-
     if st.session_state.token:
         st.success(f"👤 {st.session_state.username}")
-        if st.button("🚪 Logout", use_container_width=True):
+        if st.button("🚪 Logout"):
             st.session_state.clear()
             st.rerun()
 
@@ -79,19 +76,15 @@ if not st.session_state.token:
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
-    if st.button("Generate Token", use_container_width=True):
-        payload = {
-            "username": username,
-            "password": password,
-            "grant_type": "password"
-        }
-        headers = {
-            "Authorization": CLIENT_AUTH,
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-
-        r = requests.post(st.session_state.AUTH_URL, data=payload, headers=headers)
-
+    if st.button("Generate Token"):
+        r = requests.post(
+            st.session_state.AUTH_URL,
+            data={"username": username, "password": password, "grant_type": "password"},
+            headers={
+                "Authorization": CLIENT_AUTH,
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
+        )
         if r.status_code != 200:
             st.error("❌ Invalid credentials")
         else:
@@ -99,7 +92,6 @@ if not st.session_state.token:
             st.session_state.username = username
             st.success("✅ Login successful")
             st.rerun()
-
     st.stop()
 
 # ================= AUTH HEADER =================
@@ -109,25 +101,19 @@ headers_auth = {
     "Accept": "application/json"
 }
 
-# ================= INFO =================
-st.info(
-    "• **Create** → Leave `id` empty\n"
-    "• **Update** → Provide numeric `id` in all rows\n"
-    "• **repeatWeek / repeatWeekday** → Defaults to `*` if blank"
-)
+# ================= UPLOAD =================
+st.subheader("📤 Upload Paycode Events File")
 
-# ================= UPLOAD SECTION =================
-st.subheader("📤 Upload Paycode Events")
-
-uploaded_file = st.file_uploader("Upload CSV or Excel file", ["csv", "xlsx", "xls"])
+uploaded_file = st.file_uploader("Upload CSV or Excel", ["csv", "xlsx", "xls"])
 
 if uploaded_file:
     store = {}
 
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
+    df = (
+        pd.read_csv(uploaded_file)
+        if uploaded_file.name.endswith(".csv")
+        else pd.read_excel(uploaded_file)
+    )
 
     df = df.fillna("")
 
@@ -138,11 +124,7 @@ if uploaded_file:
         paycode_id = str(row.get("paycode_id", "")).strip()
         holiday_name = str(row.get("holiday_name", "")).strip()
 
-        repeat_week = str(row.get("repeatWeek", "")).strip() or "*"
-        repeat_weekday = str(row.get("repeatWeekday", "")).strip() or "*"
-
         date_parts = parse_date(row.get("holiday_date(DD-MM-YYYY)"))
-
         if not name or not holiday_name or not paycode_id.isdigit() or not date_parts:
             continue
 
@@ -165,63 +147,49 @@ if uploaded_file:
             "repeatDay": d,
             "repeatMonth": m,
             "repeatYear": y,
-            "repeatWeek": repeat_week,
-            "repeatWeekday": repeat_weekday
+            "repeatWeek": str(row.get("repeatWeek", "")).strip() or "*",
+            "repeatWeekday": str(row.get("repeatWeekday", "")).strip() or "*"
         })
 
     st.session_state.final_body = list(store.values())
-    st.success(f"✅ Loaded {len(store)} Paycode Events")
+    st.success(f"✅ File processed. Paycode Events: {len(store)}")
 
-# ================= CREATE / UPDATE (STATUS SHOWN – NO LOGIC CHANGE) =================
+# ================= CREATE / UPDATE =================
 st.subheader("🚀 Create / Update Paycode Events")
 
-if st.button("Submit Paycode Events", use_container_width=True):
+if st.button("Submit Paycode Events"):
+    results = []
 
-    if not st.session_state.final_body:
-        st.warning("No Paycode Events to submit")
-    else:
-        results = []
+    for payload in st.session_state.final_body:
+        is_update = "id" in payload
 
-        for payload in st.session_state.final_body:
-            is_update = bool(payload.get("id"))
+        r = (
+            requests.put(
+                f"{st.session_state.BASE_URL}/{payload['id']}",
+                headers=headers_auth,
+                json=payload
+            )
+            if is_update
+            else requests.post(
+                st.session_state.BASE_URL,
+                headers=headers_auth,
+                json=payload
+            )
+        )
 
-            try:
-                if is_update:
-                    r = requests.put(
-                        f"{st.session_state.BASE_URL}/{payload['id']}",
-                        headers=headers_auth,
-                        json=payload
-                    )
-                else:
-                    r = requests.post(
-                        st.session_state.BASE_URL,
-                        headers=headers_auth,
-                        json=payload
-                    )
+        results.append({
+            "Paycode Event": payload["name"],
+            "Action": "Update" if is_update else "Create",
+            "Status": "Success" if r.status_code in (200, 201) else "Failed",
+            "HTTP Status": r.status_code
+        })
 
-                results.append({
-                    "Paycode Event": payload.get("name"),
-                    "Action": "Update" if is_update else "Create",
-                    "Status": "Success" if r.status_code in (200, 201) else "Failed",
-                    "HTTP Status": r.status_code,
-                    "ID": payload.get("id") or (r.json().get("id") if r.status_code in (200, 201) else "")
-                })
+    st.dataframe(pd.DataFrame(results), use_container_width=True)
 
-            except Exception:
-                results.append({
-                    "Paycode Event": payload.get("name"),
-                    "Action": "Update" if is_update else "Create",
-                    "Status": "Error",
-                    "HTTP Status": "",
-                    "ID": ""
-                })
-
-        st.dataframe(pd.DataFrame(results), use_container_width=True)
-
-# ================= DOWNLOAD EXISTING =================
+# ================= DOWNLOAD =================
 st.subheader("⬇️ Download Existing Paycode Events")
 
-if st.button("Download Existing Paycode Events", use_container_width=True):
+if st.button("Download Existing Paycode Events"):
     r = requests.get(st.session_state.BASE_URL, headers=headers_auth)
 
     if r.status_code != 200:
@@ -229,9 +197,9 @@ if st.button("Download Existing Paycode Events", use_container_width=True):
     else:
         rows = []
 
-        for event in r.json():
-            for sch in event.get("schedules", []):
-                rd, rm, ry = sch.get("repeatDay"), sch.get("repeatMonth"), sch.get("repeatYear")
+        for e in r.json():
+            for s in e.get("schedules", []):
+                rd, rm, ry = s.get("repeatDay"), s.get("repeatMonth"), s.get("repeatYear")
 
                 date = (
                     f"{int(rd):02d}-{int(rm):02d}-{int(ry)}"
@@ -240,20 +208,21 @@ if st.button("Download Existing Paycode Events", use_container_width=True):
                 )
 
                 rows.append({
-                    "id": event.get("id"),
-                    "name": event.get("name"),
-                    "description": event.get("description"),
-                    "paycode_id": event.get("paycode", {}).get("id"),
-                    "holiday_name": sch.get("name"),
+                    "id": e.get("id"),
+                    "name": e.get("name"),
+                    "description": e.get("description"),
+                    "paycode_id": e.get("paycode", {}).get("id"),
+                    "holiday_name": s.get("name"),
                     "holiday_date(DD-MM-YYYY)": date,
-                    "repeatWeek": sch.get("repeatWeek", "*"),
-                    "repeatWeekday": sch.get("repeatWeekday", "*")
+                    "repeatWeek": s.get("repeatWeek", "*"),
+                    "repeatWeekday": s.get("repeatWeekday", "*")
                 })
 
         df = pd.DataFrame(rows)
 
+        # single-click download (maximum allowed)
         st.download_button(
-            "⬇️ Download CSV Now",
+            "⬇️ Download CSV",
             data=df.to_csv(index=False),
             file_name="paycode_events_export.csv",
             mime="text/csv"
