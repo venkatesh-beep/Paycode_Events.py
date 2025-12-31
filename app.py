@@ -3,6 +3,68 @@ import requests
 import pandas as pd
 import csv
 import io
+
+
+# ================= PAGE CONFIG =================
+st.set_page_config(
+    page_title="Paycode Events",
+    page_icon="🧾",
+    layout="wide"
+)
+
+# ================= DEFAULT CONFIG =================
+DEFAULT_AUTH_URL = "https://saas-beeforce.labour.tech/authorization-server/oauth/token"
+DEFAULT_BASE_URL = "https://saas-beeforce.labour.tech/resource-server/api/paycode_events"
+DEFAULT_START_DATE = "2026-01-01"
+
+CLIENT_AUTH = st.secrets["CLIENT_AUTH"]
+
+# ================= SESSION STATE =================
+def init(key, value):
+    if key not in st.session_state:
+        st.session_state[key] = value
+
+init("token", None)
+init("username", None)
+init("final_body", [])
+init("AUTH_URL", DEFAULT_AUTH_URL)
+init("BASE_URL", DEFAULT_BASE_URL)
+init("START_DATE", DEFAULT_START_DATE)
+
+# ================= DATE PARSER (FIX ONLY) =================
+def parse_date(value):
+    if value is None or str(value).strip() == "":
+        return None
+
+    if isinstance(value, pd.Timestamp):
+        return value.day, value.month, value.year
+
+    val = str(value).strip()
+
+    for sep in ["-", "/"]:
+        parts = val.split(sep)
+        if len(parts) == 3:
+            if len(parts[0]) == 4:  # YYYY-MM-DD
+                y, m, d = parts
+            else:                   # DD-MM-YYYY
+                d, m, y = parts
+
+            if d.isdigit() and m.isdigit() and y.isdigit():
+                return int(d), int(m), int(y)
+    return None
+
+# ================= SIDEBAR =================
+with st.sidebar:
+    st.title("⚙️ Configuration")
+    st.text_input("Auth URL", key="AUTH_URL")
+    st.text_input("Base URL", key="BASE_URL")
+    st.text_input("Default Start Date", key="START_DATE")
+
+    if st.session_state.token:
+        st.success(f"👤 {st.session_state.username}")
+        if st.button("🚪 Logout"):
+            st.session_state.clear()
+            st.rerun()
 # ================= DOWNLOAD TEMPLATE =================
 st.subheader("📥 Download Upload Template")
 
@@ -65,68 +127,6 @@ with col_t2:
             file_name="paycode_events_template.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
-# ================= PAGE CONFIG =================
-st.set_page_config(
-    page_title="Paycode Events",
-    page_icon="🧾",
-    layout="wide"
-)
-
-# ================= DEFAULT CONFIG =================
-DEFAULT_AUTH_URL = "https://saas-beeforce.labour.tech/authorization-server/oauth/token"
-DEFAULT_BASE_URL = "https://saas-beeforce.labour.tech/resource-server/api/paycode_events"
-DEFAULT_START_DATE = "2026-01-01"
-
-CLIENT_AUTH = st.secrets["CLIENT_AUTH"]
-
-# ================= SESSION STATE =================
-def init(key, value):
-    if key not in st.session_state:
-        st.session_state[key] = value
-
-init("token", None)
-init("username", None)
-init("final_body", [])
-init("AUTH_URL", DEFAULT_AUTH_URL)
-init("BASE_URL", DEFAULT_BASE_URL)
-init("START_DATE", DEFAULT_START_DATE)
-
-# ================= DATE PARSER (FIX ONLY) =================
-def parse_date(value):
-    if value is None or str(value).strip() == "":
-        return None
-
-    if isinstance(value, pd.Timestamp):
-        return value.day, value.month, value.year
-
-    val = str(value).strip()
-
-    for sep in ["-", "/"]:
-        parts = val.split(sep)
-        if len(parts) == 3:
-            if len(parts[0]) == 4:  # YYYY-MM-DD
-                y, m, d = parts
-            else:                   # DD-MM-YYYY
-                d, m, y = parts
-
-            if d.isdigit() and m.isdigit() and y.isdigit():
-                return int(d), int(m), int(y)
-    return None
-
-# ================= SIDEBAR =================
-with st.sidebar:
-    st.title("⚙️ Configuration")
-    st.text_input("Auth URL", key="AUTH_URL")
-    st.text_input("Base URL", key="BASE_URL")
-    st.text_input("Default Start Date", key="START_DATE")
-
-    if st.session_state.token:
-        st.success(f"👤 {st.session_state.username}")
-        if st.button("🚪 Logout"):
-            st.session_state.clear()
-            st.rerun()
-
 # ================= HEADER =================
 st.title("🧾 Paycode Event Configuration")
 st.caption("Create • Update • Delete • Download Paycode Events")
