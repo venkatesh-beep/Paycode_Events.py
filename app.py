@@ -3,6 +3,68 @@ import requests
 import pandas as pd
 import csv
 import io
+# ================= DOWNLOAD TEMPLATE =================
+st.subheader("📥 Download Upload Template")
+
+template_df = pd.DataFrame(columns=[
+    "id",
+    "Paycode Event Name",
+    "Description",
+    "paycode_id",
+    "holiday_name",
+    "holiday_date(DD-MM-YYYY)",
+    "repeatWeek",
+    "repeatWeekday"
+])
+
+def fetch_paycodes(headers_auth, base_url):
+    url = base_url.replace("paycode_events", "paycodes")
+    r = requests.get(url, headers=headers_auth)
+
+    if r.status_code != 200:
+        return pd.DataFrame(columns=["id", "paycode"])
+
+    return pd.DataFrame([
+        {
+            "id": p.get("id"),
+            "paycode": p.get("code")
+        }
+        for p in r.json()
+    ])
+
+col_t1, col_t2 = st.columns([0.7, 0.3])
+
+with col_t1:
+    st.caption(
+        "• **Sheet 1** → Paycode Events upload format\n"
+        "• **Sheet 2** → Paycodes reference (id + paycode)"
+    )
+
+with col_t2:
+    if st.button("⬇️ Download Template", use_container_width=True):
+
+        paycodes_df = fetch_paycodes(headers_auth, st.session_state.BASE_URL)
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            template_df.to_excel(
+                writer,
+                index=False,
+                sheet_name="Paycode Events"
+            )
+            paycodes_df.to_excel(
+                writer,
+                index=False,
+                sheet_name="Paycodes"
+            )
+
+        # single-click download (Streamlit limitation compliant)
+        st.download_button(
+            label="⬇️ Click to Download Excel",
+            data=output.getvalue(),
+            file_name="paycode_events_template.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 # ================= PAGE CONFIG =================
 st.set_page_config(
