@@ -33,7 +33,6 @@ init("START_DATE", DEFAULT_START_DATE)
 # ================= SIDEBAR =================
 with st.sidebar:
     st.title("⚙️ Configuration")
-
     st.text_input("Auth URL", key="AUTH_URL")
     st.text_input("Base URL", key="BASE_URL")
     st.text_input("Default Start Date", key="START_DATE")
@@ -103,7 +102,8 @@ def fetch_paycodes(headers_auth, base_url):
 # ================= INFO =================
 st.info(
     "• **Create** → Leave `id` empty\n"
-    "• **Update** → Provide numeric `id` only"
+    "• **Update** → Provide numeric `id` in all rows\n"
+    "• **repeatWeek / repeatWeekday** → Defaults to `*` if blank"
 )
 
 # ================= UPLOAD SECTION =================
@@ -168,10 +168,20 @@ if uploaded_file:
         holiday_name = str(row.get("holiday_name", "")).strip()
         holiday_date = str(row.get("holiday_date(DD-MM-YYYY)", "")).strip()
 
-        if not name or not holiday_name or not holiday_date or not paycode_id.isdigit():
+        repeat_week = str(row.get("repeatWeek", "")).strip() or "*"
+        repeat_weekday = str(row.get("repeatWeekday", "")).strip() or "*"
+
+        if not name or not holiday_name or not paycode_id.isdigit():
             continue
 
-        d, m, y = holiday_date.split("-")
+        parts = holiday_date.split("-")
+        if len(parts) != 3:
+            continue
+
+        d, m, y = [p.strip() for p in parts]
+        if not (d.isdigit() and m.isdigit() and y.isdigit()):
+            continue
+
         key = raw_id if raw_id.isdigit() else name
 
         if key not in store:
@@ -181,8 +191,6 @@ if uploaded_file:
                 "paycode": {"id": int(paycode_id)},
                 "schedules": []
             }
-
-            # ✅ FIX: assign ID only if numeric
             if raw_id.isdigit():
                 store[key]["id"] = int(raw_id)
 
@@ -192,8 +200,8 @@ if uploaded_file:
             "repeatDay": int(d),
             "repeatMonth": int(m),
             "repeatYear": int(y),
-            "repeatWeek": "*",
-            "repeatWeekday": "*"
+            "repeatWeek": repeat_week,
+            "repeatWeekday": repeat_weekday
         })
 
     st.session_state.final_body = list(store.values())
@@ -242,6 +250,7 @@ if st.button("Download Existing Paycode Events", use_container_width=True):
         for event in r.json():
             for sch in event.get("schedules", []):
                 rd, rm, ry = sch.get("repeatDay"), sch.get("repeatMonth"), sch.get("repeatYear")
+
                 date = (
                     f"{int(rd):02d}-{int(rm):02d}-{int(ry)}"
                     if str(rd).isdigit() and str(rm).isdigit() and str(ry).isdigit()
@@ -254,7 +263,9 @@ if st.button("Download Existing Paycode Events", use_container_width=True):
                     "description": event.get("description"),
                     "paycode_id": event.get("paycode", {}).get("id"),
                     "holiday_name": sch.get("name"),
-                    "holiday_date(DD-MM-YYYY)": date
+                    "holiday_date(DD-MM-YYYY)": date,
+                    "repeatWeek": sch.get("repeatWeek", "*"),
+                    "repeatWeekday": sch.get("repeatWeekday", "*")
                 })
 
         df = pd.DataFrame(rows)
