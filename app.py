@@ -96,17 +96,14 @@ def fetch_paycodes(headers_auth, base_url):
         return pd.DataFrame(columns=["id", "paycode"])
 
     return pd.DataFrame([
-        {
-            "id": p.get("id"),
-            "paycode": p.get("code")
-        }
+        {"id": p.get("id"), "paycode": p.get("code")}
         for p in r.json()
     ])
 
 # ================= INFO =================
 st.info(
     "• **Create** → Leave `id` empty\n"
-    "• **Update** → Provide `id`"
+    "• **Update** → Provide numeric `id` only"
 )
 
 # ================= UPLOAD SECTION =================
@@ -144,7 +141,7 @@ with col2:
             paycodes_df.to_excel(writer, index=False, sheet_name="Paycodes")
 
         st.download_button(
-            label="⬇️ Click to Download Excel",
+            "⬇️ Click to Download Excel",
             data=output.getvalue(),
             file_name="paycode_events_template.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -167,32 +164,34 @@ if uploaded_file:
         raw_id = str(row.get("id", "")).strip()
         name = str(row.get("Paycode Event Name", "")).strip()
         description = str(row.get("Description", "")).strip() or name
-        paycode_id = int(row.get("paycode_id"))
+        paycode_id = str(row.get("paycode_id", "")).strip()
         holiday_name = str(row.get("holiday_name", "")).strip()
         holiday_date = str(row.get("holiday_date(DD-MM-YYYY)", "")).strip()
 
-        if not name or not holiday_name or not holiday_date:
+        if not name or not holiday_name or not holiday_date or not paycode_id.isdigit():
             continue
 
-        day, month, year = holiday_date.split("-")
-        key = raw_id if raw_id else name
+        d, m, y = holiday_date.split("-")
+        key = raw_id if raw_id.isdigit() else name
 
         if key not in store:
             store[key] = {
                 "name": name,
                 "description": description,
-                "paycode": {"id": paycode_id},
+                "paycode": {"id": int(paycode_id)},
                 "schedules": []
             }
-            if raw_id:
+
+            # ✅ FIX: assign ID only if numeric
+            if raw_id.isdigit():
                 store[key]["id"] = int(raw_id)
 
         store[key]["schedules"].append({
             "name": holiday_name,
             "startDate": st.session_state.START_DATE,
-            "repeatDay": int(day),
-            "repeatMonth": int(month),
-            "repeatYear": int(year),
+            "repeatDay": int(d),
+            "repeatMonth": int(m),
+            "repeatYear": int(y),
             "repeatWeek": "*",
             "repeatWeekday": "*"
         })
@@ -229,19 +228,6 @@ if st.button("Submit Paycode Events", use_container_width=True):
     if failed:
         st.error(f"❌ Failed: {failed}")
 
-# ================= DELETE =================
-st.subheader("🗑️ Delete Paycode Events")
-
-ids_input = st.text_input("Enter Paycode Event IDs (comma-separated)")
-
-if st.button("Delete", use_container_width=True):
-    for pid in [i.strip() for i in ids_input.split(",") if i.isdigit()]:
-        r = requests.delete(f"{st.session_state.BASE_URL}/{pid}", headers=headers_auth)
-        if r.status_code in (200, 204):
-            st.success(f"Deleted {pid}")
-        else:
-            st.error(f"Failed to delete {pid}")
-
 # ================= DOWNLOAD EXISTING =================
 st.subheader("⬇️ Download Existing Paycode Events")
 
@@ -255,15 +241,12 @@ if st.button("Download Existing Paycode Events", use_container_width=True):
 
         for event in r.json():
             for sch in event.get("schedules", []):
-
-                rd = sch.get("repeatDay")
-                rm = sch.get("repeatMonth")
-                ry = sch.get("repeatYear")
-
-                if str(rd).isdigit() and str(rm).isdigit() and str(ry).isdigit():
-                    date = f"{int(rd):02d}-{int(rm):02d}-{int(ry)}"
-                else:
-                    date = ""
+                rd, rm, ry = sch.get("repeatDay"), sch.get("repeatMonth"), sch.get("repeatYear")
+                date = (
+                    f"{int(rd):02d}-{int(rm):02d}-{int(ry)}"
+                    if str(rd).isdigit() and str(rm).isdigit() and str(ry).isdigit()
+                    else ""
+                )
 
                 rows.append({
                     "id": event.get("id"),
