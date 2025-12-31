@@ -4,7 +4,6 @@ import pandas as pd
 import csv
 import io
 
-
 # ================= PAGE CONFIG =================
 st.set_page_config(
     page_title="Paycode Events",
@@ -20,9 +19,9 @@ DEFAULT_START_DATE = "2026-01-01"
 CLIENT_AUTH = st.secrets["CLIENT_AUTH"]
 
 # ================= SESSION STATE =================
-def init(key, value):
-    if key not in st.session_state:
-        st.session_state[key] = value
+def init(k, v):
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 init("token", None)
 init("username", None)
@@ -31,7 +30,7 @@ init("AUTH_URL", DEFAULT_AUTH_URL)
 init("BASE_URL", DEFAULT_BASE_URL)
 init("START_DATE", DEFAULT_START_DATE)
 
-# ================= DATE PARSER (FIX ONLY) =================
+# ================= DATE PARSER (FIXED) =================
 def parse_date(value):
     if value is None or str(value).strip() == "":
         return None
@@ -65,6 +64,56 @@ with st.sidebar:
         if st.button("🚪 Logout"):
             st.session_state.clear()
             st.rerun()
+
+# ================= HEADER =================
+st.title("🧾 Paycode Event Configuration")
+st.caption("Create • Update • Delete • Download Paycode Events")
+
+# ================= LOGIN =================
+if not st.session_state.token:
+    st.subheader("🔐 Login")
+
+    u = st.text_input("Username")
+    p = st.text_input("Password", type="password")
+
+    if st.button("Generate Token"):
+        r = requests.post(
+            st.session_state.AUTH_URL,
+            data={"username": u, "password": p, "grant_type": "password"},
+            headers={
+                "Authorization": CLIENT_AUTH,
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
+        )
+        if r.status_code != 200:
+            st.error("❌ Invalid credentials")
+        else:
+            st.session_state.token = r.json()["access_token"]
+            st.session_state.username = u
+            st.success("✅ Login successful")
+            st.rerun()
+    st.stop()
+
+# ================= AUTH HEADER =================
+headers_auth = {
+    "Authorization": f"Bearer {st.session_state.token}",
+    "Content-Type": "application/json;charset=UTF-8",
+    "Accept": "application/json"
+}
+
+# ================= FETCH PAYCODES =================
+def fetch_paycodes(headers_auth, base_url):
+    url = base_url.replace("paycode_events", "paycodes")
+    r = requests.get(url, headers=headers_auth)
+
+    if r.status_code != 200:
+        return pd.DataFrame(columns=["id", "paycode"])
+
+    return pd.DataFrame([
+        {"id": p.get("id"), "paycode": p.get("code")}
+        for p in r.json()
+    ])
+
 # ================= DOWNLOAD TEMPLATE =================
 st.subheader("📥 Download Upload Template")
 
@@ -79,104 +128,39 @@ template_df = pd.DataFrame(columns=[
     "repeatWeekday"
 ])
 
-def fetch_paycodes(headers_auth, base_url):
-    url = base_url.replace("paycode_events", "paycodes")
-    r = requests.get(url, headers=headers_auth)
+col1, col2 = st.columns([0.7, 0.3])
 
-    if r.status_code != 200:
-        return pd.DataFrame(columns=["id", "paycode"])
-
-    return pd.DataFrame([
-        {
-            "id": p.get("id"),
-            "paycode": p.get("code")
-        }
-        for p in r.json()
-    ])
-
-col_t1, col_t2 = st.columns([0.7, 0.3])
-
-with col_t1:
+with col1:
     st.caption(
-        "• **Sheet 1** → Paycode Events upload format\n"
-        "• **Sheet 2** → Paycodes reference (id + paycode)"
+        "• Sheet 1 → Paycode Events Upload\n"
+        "• Sheet 2 → Paycodes Reference (id + paycode)"
     )
 
-with col_t2:
+with col2:
     if st.button("⬇️ Download Template", use_container_width=True):
-
         paycodes_df = fetch_paycodes(headers_auth, st.session_state.BASE_URL)
 
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            template_df.to_excel(
-                writer,
-                index=False,
-                sheet_name="Paycode Events"
-            )
-            paycodes_df.to_excel(
-                writer,
-                index=False,
-                sheet_name="Paycodes"
-            )
+            template_df.to_excel(writer, index=False, sheet_name="Paycode Events")
+            paycodes_df.to_excel(writer, index=False, sheet_name="Paycodes")
 
-        # single-click download (Streamlit limitation compliant)
         st.download_button(
-            label="⬇️ Click to Download Excel",
+            "⬇️ Click to Download Excel",
             data=output.getvalue(),
             file_name="paycode_events_template.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-# ================= HEADER =================
-st.title("🧾 Paycode Event Configuration")
-st.caption("Create • Update • Delete • Download Paycode Events")
-
-# ================= LOGIN =================
-if not st.session_state.token:
-    st.subheader("🔐 Login")
-
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Generate Token"):
-        r = requests.post(
-            st.session_state.AUTH_URL,
-            data={"username": username, "password": password, "grant_type": "password"},
-            headers={
-                "Authorization": CLIENT_AUTH,
-                "Content-Type": "application/x-www-form-urlencoded"
-            }
-        )
-        if r.status_code != 200:
-            st.error("❌ Invalid credentials")
-        else:
-            st.session_state.token = r.json()["access_token"]
-            st.session_state.username = username
-            st.success("✅ Login successful")
-            st.rerun()
-    st.stop()
-
-# ================= AUTH HEADER =================
-headers_auth = {
-    "Authorization": f"Bearer {st.session_state.token}",
-    "Content-Type": "application/json;charset=UTF-8",
-    "Accept": "application/json"
-}
 
 # ================= UPLOAD =================
-st.subheader("📤 Upload Paycode Events File")
+st.subheader("📤 Upload Paycode Events")
 
 uploaded_file = st.file_uploader("Upload CSV or Excel", ["csv", "xlsx", "xls"])
 
 if uploaded_file:
     store = {}
 
-    df = (
-        pd.read_csv(uploaded_file)
-        if uploaded_file.name.endswith(".csv")
-        else pd.read_excel(uploaded_file)
-    )
-
+    df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
     df = df.fillna("")
 
     for _, row in df.iterrows():
@@ -214,7 +198,7 @@ if uploaded_file:
         })
 
     st.session_state.final_body = list(store.values())
-    st.success(f"✅ File processed. Paycode Events: {len(store)}")
+    st.success(f"✅ Loaded {len(store)} Paycode Events")
 
 # ================= CREATE / UPDATE =================
 st.subheader("🚀 Create / Update Paycode Events")
@@ -226,17 +210,9 @@ if st.button("Submit Paycode Events"):
         is_update = "id" in payload
 
         r = (
-            requests.put(
-                f"{st.session_state.BASE_URL}/{payload['id']}",
-                headers=headers_auth,
-                json=payload
-            )
+            requests.put(f"{st.session_state.BASE_URL}/{payload['id']}", headers=headers_auth, json=payload)
             if is_update
-            else requests.post(
-                st.session_state.BASE_URL,
-                headers=headers_auth,
-                json=payload
-            )
+            else requests.post(st.session_state.BASE_URL, headers=headers_auth, json=payload)
         )
 
         results.append({
@@ -248,7 +224,22 @@ if st.button("Submit Paycode Events"):
 
     st.dataframe(pd.DataFrame(results), use_container_width=True)
 
-# ================= DOWNLOAD =================
+# ================= DELETE =================
+st.subheader("🗑️ Delete Paycode Events")
+
+ids_input = st.text_input("Enter Paycode Event IDs (comma-separated)")
+
+if st.button("Delete Paycode Events"):
+    ids = [i.strip() for i in ids_input.split(",") if i.strip().isdigit()]
+
+    for pid in ids:
+        r = requests.delete(f"{st.session_state.BASE_URL}/{pid}", headers=headers_auth)
+        if r.status_code in (200, 204):
+            st.success(f"Deleted Paycode Event ID {pid}")
+        else:
+            st.error(f"Failed to delete ID {pid}")
+
+# ================= DOWNLOAD EXISTING =================
 st.subheader("⬇️ Download Existing Paycode Events")
 
 if st.button("Download Existing Paycode Events"):
@@ -262,7 +253,6 @@ if st.button("Download Existing Paycode Events"):
         for e in r.json():
             for s in e.get("schedules", []):
                 rd, rm, ry = s.get("repeatDay"), s.get("repeatMonth"), s.get("repeatYear")
-
                 date = (
                     f"{int(rd):02d}-{int(rm):02d}-{int(ry)}"
                     if str(rd).isdigit() and str(rm).isdigit() and str(ry).isdigit()
@@ -282,7 +272,6 @@ if st.button("Download Existing Paycode Events"):
 
         df = pd.DataFrame(rows)
 
-        # single-click download (maximum allowed)
         st.download_button(
             "⬇️ Download CSV",
             data=df.to_csv(index=False),
