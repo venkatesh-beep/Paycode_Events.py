@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import pandas as pd
-import csv
 import io
 import re
 from datetime import datetime
@@ -16,7 +15,6 @@ st.set_page_config(
 # ================= DEFAULT CONFIG =================
 DEFAULT_HOST = "https://saas-beeforce.labour.tech/"
 DEFAULT_START_DATE = "2026-01-01"
-
 CLIENT_AUTH = st.secrets["CLIENT_AUTH"]
 
 # ================= SESSION STATE =================
@@ -40,7 +38,7 @@ def paycode_events_url():
 def paycodes_url():
     return st.session_state.HOST.rstrip("/") + "/resource-server/api/paycodes"
 
-# ================= DATE NORMALIZATION (AS REQUESTED) =================
+# ================= DATE NORMALIZATION (APPROVED LOGIC) =================
 def normalize_yyyy_mm_dd(date_value):
     if not date_value:
         return None
@@ -166,11 +164,7 @@ if uploaded_file:
         description = str(row.get("Description", "")).strip() or name
         paycode_id = str(row.get("paycode_id", "")).strip()
         holiday_name = str(row.get("holiday_name", "")).strip()
-
-        holiday_raw = (
-            row.get("holiday_date(YYYY-MM-DD)", "")
-            or row.get("holiday_date", "")
-        )
+        holiday_raw = row.get("holiday_date(YYYY-MM-DD)", "")
 
         repeat_week = str(row.get("repeatWeek", "")).strip() or "*"
         repeat_weekday = str(row.get("repeatWeekday", "")).strip() or "*"
@@ -188,15 +182,14 @@ if uploaded_file:
         key = raw_id if raw_id.isdigit() else name
 
         if key not in store:
-            base = {
+            store[key] = {
                 "name": name,
                 "description": description,
                 "paycode": {"id": int(float(paycode_id))},
                 "schedules": []
             }
             if raw_id.isdigit():
-                base["id"] = int(raw_id)
-            store[key] = base
+                store[key]["id"] = int(raw_id)
 
         store[key]["schedules"].append({
             "name": holiday_name,
@@ -230,14 +223,12 @@ if st.button("Submit Paycode Events"):
             else requests.post(paycode_events_url(), headers=headers_auth, json=payload)
         )
 
-        saying = r.json().get("message") if r.headers.get("Content-Type","").startswith("application/json") else r.text
-
         results.append({
             "Paycode Event": payload["name"],
             "Action": "Update" if is_update else "Create",
             "HTTP Status": r.status_code,
             "Status": "Success" if r.status_code in (200, 201) else "Failed",
-            "Message": saying
+            "Message": r.text
         })
 
     st.dataframe(pd.DataFrame(results), use_container_width=True)
@@ -260,19 +251,29 @@ st.subheader("⬇️ Download Existing Paycode Events")
 
 if st.button("Download Existing Paycode Events"):
     r = requests.get(paycode_events_url(), headers=headers_auth)
+
     if r.status_code != 200:
-        st.error("Failed to fetch")
+        st.error("❌ Failed to fetch Paycode Events")
     else:
         rows = []
+
         for e in r.json():
             for s in e.get("schedules", []):
+                ry = s.get("repeatYear")
+                rm = s.get("repeatMonth")
+                rd = s.get("repeatDay")
+
+                holiday_date = ""
+                if str(ry).isdigit() and str(rm).isdigit() and str(rd).isdigit():
+                    holiday_date = f"{int(ry):04d}-{int(rm):02d}-{int(rd):02d}"
+
                 rows.append({
                     "id": e.get("id"),
                     "name": e.get("name"),
                     "description": e.get("description"),
                     "paycode_id": e.get("paycode", {}).get("id"),
                     "holiday_name": s.get("name"),
-                    "holiday_date(YYYY-MM-DD)": f"{s['repeatYear']:04d}-{s['repeatMonth']:02d}-{s['repeatDay']:02d}",
+                    "holiday_date(YYYY-MM-DD)": holiday_date,
                     "repeatWeek": s.get("repeatWeek", "*"),
                     "repeatWeekday": s.get("repeatWeekday", "*")
                 })
