@@ -5,7 +5,7 @@ import io
 import re
 from datetime import datetime
 
-# ================= PAGE CONFIG =================
+# ================= PAGE CONFIGs =================
 st.set_page_config(
     page_title="Paycode Events",
     page_icon="🧾",
